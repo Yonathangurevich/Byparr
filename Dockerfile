@@ -29,6 +29,7 @@ ENTRYPOINT ["sleep","infinity"]
 
 FROM base AS app
 COPY pyproject.toml uv.lock ./
+# <<< כאן ה-id הנדרש >>>
 RUN --mount=type=cache,id=uv-cache,target=${HOME}/.cache/uv uv sync
 
 # SeleniumBase does not come with an arm64 chromedriver binary
@@ -36,7 +37,8 @@ RUN cd .venv/lib/*/site-packages/seleniumbase/drivers && rm -f uc_driver && ln -
 COPY . .
 
 FROM app AS test
-RUN --mount=type=cache,id=uv-cache,target=${HOME}/.cache/uv uv sync --group test
+# <<< ושוב עם id שונה/זהה – העיקר שיהיה id= >>>
+RUN --mount=type=cache,id=uv-test-cache,target=${HOME}/.cache/uv uv sync --group test
 RUN ./test.sh
 
 FROM app

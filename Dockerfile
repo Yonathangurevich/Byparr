@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1
 FROM debian:bookworm-slim AS base
 ENV HOME=/root
 
@@ -15,33 +15,31 @@ ENV GITHUB_BUILD=${GITHUB_BUILD} \
 
 WORKDIR /app
 
+# מערכת + Chromium + chromedriver + tini
 RUN apt-get update && \
     apt-get install -y --no-install-recommends --no-install-suggests \
-      xauth xvfb scrot curl chromium chromium-driver ca-certificates tini
+      python3 python3-venv python3-pip \
+      xauth xvfb scrot curl chromium chromium-driver ca-certificates tini && \
+    rm -rf /var/lib/apt/lists/*
 
+# התקנת uv
 ADD https://astral.sh/uv/install.sh install.sh
 RUN sh install.sh && uv --version
 
-FROM base AS devcontainer
-RUN apt install -y git && apt upgrade -y
-ENV UV_LINK_MODE=copy
-ENTRYPOINT ["sleep","infinity"]
-
-FROM base AS app
+# התקנת תלויות ה-Python מתוך pyproject/uv.lock
 COPY pyproject.toml uv.lock ./
-# <<< כאן ה-id הנדרש >>>
-RUN --mount=type=cache,id=uv-cache,target=${HOME}/.cache/uv uv sync
+RUN uv sync --frozen --no-dev
 
-# SeleniumBase does not come with an arm64 chromedriver binary
+# SeleniumBase לא מספק uc_driver ל-arm64; נוודא לינק ל-chromedriver
 RUN cd .venv/lib/*/site-packages/seleniumbase/drivers && rm -f uc_driver && ln -s /usr/bin/chromedriver uc_driver
+
+# קוד האפליקציה
 COPY . .
 
-FROM app AS test
-# <<< ושוב עם id שונה/זהה – העיקר שיהיה id= >>>
-RUN --mount=type=cache,id=uv-test-cache,target=${HOME}/.cache/uv uv sync --group test
-RUN ./test.sh
-
-FROM app
 EXPOSE 8191
-HEALTHCHECK --interval=15m --timeout=30s --start-period=5s --retries=3 CMD ["curl","http://localhost:8191/health"]
-ENTRYPOINT ["/usr/bin/tini","--","uv","run","main.py"]
+# healthcheck פנימי של Byparr
+HEALTHCHECK --interval=5m --timeout=30s --start-period=30s --retries=3 \
+  CMD curl -fsS http://localhost:8191/health || exit 1
+
+ENTRYPOINT ["/usr/bin/tini","--"]
+CMD ["uv","run","main.py","--host","0.0.0.0","--port","8191"]

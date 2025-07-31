@@ -20,9 +20,12 @@ RUN uv sync --frozen --no-dev
 RUN cd .venv/lib/*/site-packages/seleniumbase/drivers && rm -f uc_driver && ln -s /usr/bin/chromedriver uc_driver
 COPY . .
 
-EXPOSE 8191
-HEALTHCHECK --interval=5m --timeout=30s --start-period=30s --retries=3 \
-  CMD curl -fsS http://localhost:8191/health || exit 1
+# לא קובע כאן EXPOSE כדי לא "לנעול" לפורט אחד. Railway יעביר לפי $PORT.
+
+# Healthcheck פנימי – משתמש ב-$PORT
+HEALTHCHECK --interval=2m --timeout=20s --start-period=30s --retries=5 \
+  CMD bash -lc 'curl -fsS http://127.0.0.1:${PORT:-8191}/health || exit 1'
 
 ENTRYPOINT ["/usr/bin/tini","--"]
-CMD ["uv","run","main.py","--host","0.0.0.0","--port","8191"]
+# מריץ את השרת על $PORT (אם אין – ברירת מחדל 8191)
+CMD ["sh","-lc","uv run main.py --host 0.0.0.0 --port ${PORT:-8191}"]
